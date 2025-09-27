@@ -24,9 +24,17 @@ struct{
 	GtkWidget *buttons[BUTTON_COUNT];
 	GtkWidget *volume_scale;
 	GtkWidget *dsp_combo;
+	GtkWidget *menu_button;
 	guint ui_callback_id;
 	guint volume_change_callback_id;
+	guint on_config_load_callback_id;
 	GHashTable *db_action_map;
+	struct{
+		bool menubar_button;
+		bool window_buttons;
+		bool decoration_layout_toggle;
+		const char *decoration_layout;
+	} options;
 } customheaderbar_data;
 
 static void on_notify_title(__attribute__((unused)) GtkWidget* widget,__attribute__((unused)) GParamSpec* property,__attribute__((unused)) gpointer data){
@@ -49,7 +57,7 @@ static gboolean volumebar_change(__attribute__((unused)) gpointer user_data){
 	g_signal_handlers_block_matched(G_OBJECT(customheaderbar_data.volume_scale),mask,0,0,NULL,(gpointer)on_volumebar_change,NULL);
 	gtk_range_set_value(GTK_RANGE(customheaderbar_data.volume_scale),deadbeef->volume_get_amp());
 	g_signal_handlers_unblock_matched(G_OBJECT(customheaderbar_data.volume_scale),mask,0,0,NULL,(gpointer)on_volumebar_change,NULL);
-	return false;
+	return G_SOURCE_REMOVE;
 }
 static void volume_change_on_callback_end(__attribute__((unused)) void *data){
 	customheaderbar_data.volume_change_callback_id = 0;
@@ -57,10 +65,7 @@ static void volume_change_on_callback_end(__attribute__((unused)) void *data){
 
 static int dsp_preset_scandir_filter(const struct dirent *ent){
     char *ext = strrchr(ent->d_name,'.');
-    if(ext && !strcasecmp(ext,".txt")){
-        return 1;
-    }
-    return 0;
+    return ext && !strcasecmp(ext,".txt");
 }
 static gboolean dspcombo_init(__attribute__((unused)) gpointer user_data){
 	gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(customheaderbar_data.dsp_combo));
@@ -107,108 +112,150 @@ static void on_dspcombo_change(GtkComboBox* self,__attribute__((unused)) gpointe
 		if(db_action) gtk_widget_set_tooltip_text(button,db_action->title);\
 	}
 
+static gboolean on_config_load(__attribute__((unused)) gpointer user_data){
+	#define CONFIG_IF_BEGIN(ty,conf_get,opt_var) \
+		ty opt = conf_get;\
+		if(opt_var != opt){\
+			opt_var = opt;
+	#define CONFIG_IF_END() }
+
+	{
+		CONFIG_IF_BEGIN(bool,deadbeef->conf_get_int("customheaderbar.menubar_button",1),customheaderbar_data.options.menubar_button)
+			if(customheaderbar_data.options.menubar_button){
+				gtk_widget_show(customheaderbar_data.menu_button);
+			}else{
+				gtk_widget_hide(customheaderbar_data.menu_button);
+
+				//Must show the menu bar just in case. Otherwise, there may be no other ways to get to the settings for a normal user.
+				gtk_widget_show(gtkui_lookup_widget(GTK_WIDGET(gtkui_plugin->get_mainwin()),"menubar"));
+				deadbeef->conf_set_int("gtkui.show_menu",true);
+			}
+		CONFIG_IF_END()
+	}{
+		CONFIG_IF_BEGIN(bool,deadbeef->conf_get_int("customheaderbar.decoration_layout_toggle",0),customheaderbar_data.options.decoration_layout_toggle)
+			if(customheaderbar_data.options.decoration_layout_toggle){
+				deadbeef->conf_lock();
+				gtk_header_bar_set_decoration_layout(customheaderbar_data.headerbar,deadbeef->conf_get_str_fast("customheaderbar.decoration_layout",""));
+				deadbeef->conf_unlock();
+			}else{
+				gtk_header_bar_set_decoration_layout(customheaderbar_data.headerbar,NULL);
+			}
+		CONFIG_IF_END()
+	}{
+		CONFIG_IF_BEGIN(bool,deadbeef->conf_get_int("customheaderbar.window_buttons",1),customheaderbar_data.options.window_buttons)
+			gtk_header_bar_set_show_close_button(customheaderbar_data.headerbar,customheaderbar_data.options.window_buttons);
+		CONFIG_IF_END()
+	}
+	return G_SOURCE_REMOVE;
+}
+static void on_config_load_callback_end(__attribute__((unused)) void *data){
+	customheaderbar_data.on_config_load_callback_id = 0;
+}
+
 static void customheaderbar_window_init_hook(__attribute__((unused)) void *user_data){
 	customheaderbar_data.db_action_map = g_hash_table_new_full(g_str_hash,g_str_equal,free,NULL); //TODO: free
 	customheaderbar_data.ui_callback_id = 0;
+	memset(&customheaderbar_data.options,255,sizeof(customheaderbar_data.options));
 
 	GtkWidget *window = gtkui_plugin->get_mainwin();
 	g_assert_nonnull(window);
 
 	GActionGroup *action_group = deadbeef_action_group(customheaderbar_data.db_action_map);
 	customheaderbar_data.headerbar = GTK_HEADER_BAR(gtk_header_bar_new());
-		gtk_header_bar_set_show_close_button(customheaderbar_data.headerbar,true);
-			GtkWidget *button_box;
-			button_box = gtk_button_box_new(GTK_ORIENTATION_HORIZONTAL);
-				#define button customheaderbar_data.buttons[BUTTON_PREV]
-				button = gtk_button_new_from_icon_name("media-skip-backward-symbolic",GTK_ICON_SIZE_SMALL_TOOLBAR);
-					BUTTON_ACTION_INIT(button,"prev_or_restart");
-					gtk_widget_show(button);
-				gtk_box_pack_start(GTK_BOX(button_box),button,false,false,0);
-				#undef button
+		on_config_load(NULL);
 
-				#define button customheaderbar_data.buttons[BUTTON_PLAYPAUSE]
-				button = gtk_button_new();
-					gtk_button_set_image(GTK_BUTTON(button),PLAY_IMAGE_NEW);
-					BUTTON_ACTION_INIT(button,"play_pause");
-					gtk_widget_show(button);
-				gtk_box_pack_start(GTK_BOX(button_box),button,false,false,0);
-				#undef button
+		GtkWidget *button_box;
+		button_box = gtk_button_box_new(GTK_ORIENTATION_HORIZONTAL);
+			#define button customheaderbar_data.buttons[BUTTON_PREV]
+			button = gtk_button_new_from_icon_name("media-skip-backward-symbolic",GTK_ICON_SIZE_SMALL_TOOLBAR);
+				BUTTON_ACTION_INIT(button,"prev_or_restart");
+				gtk_widget_show(button);
+			gtk_box_pack_start(GTK_BOX(button_box),button,false,false,0);
+			#undef button
 
-				#define button customheaderbar_data.buttons[BUTTON_STOP]
-				button = gtk_button_new_from_icon_name("media-playback-stop-symbolic",GTK_ICON_SIZE_SMALL_TOOLBAR);
-					BUTTON_ACTION_INIT(button,"stop");
-					gtk_widget_show(button);
-				gtk_box_pack_start(GTK_BOX(button_box),button,false,false,0);
-				#undef button
+			#define button customheaderbar_data.buttons[BUTTON_PLAYPAUSE]
+			button = gtk_button_new();
+				gtk_button_set_image(GTK_BUTTON(button),PLAY_IMAGE_NEW);
+				BUTTON_ACTION_INIT(button,"play_pause");
+				gtk_widget_show(button);
+			gtk_box_pack_start(GTK_BOX(button_box),button,false,false,0);
+			#undef button
 
-				#define button customheaderbar_data.buttons[BUTTON_NEXT]
-				button = gtk_button_new_from_icon_name("media-skip-forward-symbolic",GTK_ICON_SIZE_SMALL_TOOLBAR);
-					BUTTON_ACTION_INIT(button,"next");
-					gtk_widget_show(button);
-				gtk_box_pack_start(GTK_BOX(button_box),button,false,false,0);
-				#undef button
+			#define button customheaderbar_data.buttons[BUTTON_STOP]
+			button = gtk_button_new_from_icon_name("media-playback-stop-symbolic",GTK_ICON_SIZE_SMALL_TOOLBAR);
+				BUTTON_ACTION_INIT(button,"stop");
+				gtk_widget_show(button);
+			gtk_box_pack_start(GTK_BOX(button_box),button,false,false,0);
+			#undef button
 
-				#define button customheaderbar_data.buttons[BUTTON_NEXT_SHUFFLE]
-				button = gtk_button_new_from_icon_name("media-playlist-shuffle-symbolic",GTK_ICON_SIZE_SMALL_TOOLBAR);
-					BUTTON_ACTION_INIT(button,"playback_random");
-					gtk_widget_show(button);
-				gtk_box_pack_start(GTK_BOX(button_box),button,false,false,0);
-				#undef button
+			#define button customheaderbar_data.buttons[BUTTON_NEXT]
+			button = gtk_button_new_from_icon_name("media-skip-forward-symbolic",GTK_ICON_SIZE_SMALL_TOOLBAR);
+				BUTTON_ACTION_INIT(button,"next");
+				gtk_widget_show(button);
+			gtk_box_pack_start(GTK_BOX(button_box),button,false,false,0);
+			#undef button
 
-				gtk_button_box_set_layout(GTK_BUTTON_BOX(button_box),GTK_BUTTONBOX_EXPAND);
-				gtk_widget_show(button_box);
-			gtk_header_bar_pack_start(customheaderbar_data.headerbar,button_box);
+			#define button customheaderbar_data.buttons[BUTTON_NEXT_SHUFFLE]
+			button = gtk_button_new_from_icon_name("media-playlist-shuffle-symbolic",GTK_ICON_SIZE_SMALL_TOOLBAR);
+				BUTTON_ACTION_INIT(button,"playback_random");
+				gtk_widget_show(button);
+			gtk_box_pack_start(GTK_BOX(button_box),button,false,false,0);
+			#undef button
 
-			button_box = gtk_button_box_new(GTK_ORIENTATION_HORIZONTAL);
-				#define button customheaderbar_data.buttons[BUTTON_JUMP_TO_CURRENT]
-				button = gtk_button_new_from_icon_name("edit-select-symbolic",GTK_ICON_SIZE_SMALL_TOOLBAR);
-					BUTTON_ACTION_INIT(button,"jump_to_current_track");
-					gtk_widget_show(button);
-				gtk_box_pack_start(GTK_BOX(button_box),button,false,false,0);
-				#undef button
+			gtk_button_box_set_layout(GTK_BUTTON_BOX(button_box),GTK_BUTTONBOX_EXPAND);
+			gtk_widget_show(button_box);
+		gtk_header_bar_pack_start(customheaderbar_data.headerbar,button_box);
 
-				gtk_button_box_set_layout(GTK_BUTTON_BOX(button_box),GTK_BUTTONBOX_EXPAND);
-				gtk_widget_show(button_box);
-			gtk_header_bar_pack_start(customheaderbar_data.headerbar,button_box);
+		button_box = gtk_button_box_new(GTK_ORIENTATION_HORIZONTAL);
+			#define button customheaderbar_data.buttons[BUTTON_JUMP_TO_CURRENT]
+			button = gtk_button_new_from_icon_name("edit-select-symbolic",GTK_ICON_SIZE_SMALL_TOOLBAR);
+				BUTTON_ACTION_INIT(button,"jump_to_current_track");
+				gtk_widget_show(button);
+			gtk_box_pack_start(GTK_BOX(button_box),button,false,false,0);
+			#undef button
 
-			customheaderbar_data.dsp_combo = gtk_combo_box_text_new();
-				dspcombo_init(NULL);
-				{
-					GtkLabel *dsp_combo_label = GTK_LABEL(gtk_bin_get_child(GTK_BIN(customheaderbar_data.dsp_combo)));
-					gtk_label_set_max_width_chars(dsp_combo_label,16);
-					gtk_label_set_ellipsize(dsp_combo_label,PANGO_ELLIPSIZE_END);
-				}
-				g_signal_connect(customheaderbar_data.dsp_combo,"changed",G_CALLBACK(on_dspcombo_change),NULL);
-				gtk_widget_show(customheaderbar_data.dsp_combo);
-			gtk_header_bar_pack_start(customheaderbar_data.headerbar,customheaderbar_data.dsp_combo);
+			gtk_button_box_set_layout(GTK_BUTTON_BOX(button_box),GTK_BUTTONBOX_EXPAND);
+			gtk_widget_show(button_box);
+		gtk_header_bar_pack_start(customheaderbar_data.headerbar,button_box);
 
-			button_box = gtk_button_box_new(GTK_ORIENTATION_HORIZONTAL);
-				GtkWidget *button;
+		customheaderbar_data.dsp_combo = gtk_combo_box_text_new();
+			dspcombo_init(NULL);
+			{
+				GtkLabel *dsp_combo_label = GTK_LABEL(gtk_bin_get_child(GTK_BIN(customheaderbar_data.dsp_combo)));
+				gtk_label_set_max_width_chars(dsp_combo_label,16);
+				gtk_label_set_ellipsize(dsp_combo_label,PANGO_ELLIPSIZE_END);
+			}
+			g_signal_connect(customheaderbar_data.dsp_combo,"changed",G_CALLBACK(on_dspcombo_change),NULL);
+			gtk_widget_show(customheaderbar_data.dsp_combo);
+		gtk_header_bar_pack_start(customheaderbar_data.headerbar,customheaderbar_data.dsp_combo);
 
-				button = gtk_button_new_from_icon_name("preferences-other-symbolic",GTK_ICON_SIZE_SMALL_TOOLBAR);
-					BUTTON_ACTION_INIT(button,"preferences");
-					gtk_style_context_add_class(gtk_widget_get_style_context(button),"flat");
-					gtk_widget_show(button);
-				gtk_box_pack_start(GTK_BOX(button_box),button,false,false,0);
+		button_box = gtk_button_box_new(GTK_ORIENTATION_HORIZONTAL);
+			GtkWidget *button;
 
-				button = gtk_button_new_from_icon_name("open-menu-symbolic",GTK_ICON_SIZE_SMALL_TOOLBAR);
-					g_signal_connect(button,"clicked",G_CALLBACK(on_menubar_toggle),window);
-					gtk_widget_set_tooltip_text(button,"Toggle menu bar");
-					gtk_style_context_add_class(gtk_widget_get_style_context(button),"flat");
-					gtk_widget_show(button);
-				gtk_box_pack_start(GTK_BOX(button_box),button,false,false,0);
+			button = gtk_button_new_from_icon_name("preferences-other-symbolic",GTK_ICON_SIZE_SMALL_TOOLBAR);
+				BUTTON_ACTION_INIT(button,"preferences");
+				gtk_style_context_add_class(gtk_widget_get_style_context(button),"flat");
+				gtk_widget_show(button);
+			gtk_box_pack_start(GTK_BOX(button_box),button,false,false,0);
 
-				gtk_button_box_set_layout(GTK_BUTTON_BOX(button_box),GTK_BUTTONBOX_EXPAND);
-				gtk_widget_show(button_box);
-			gtk_header_bar_pack_end(customheaderbar_data.headerbar,button_box);
+			customheaderbar_data.menu_button = gtk_button_new_from_icon_name("open-menu-symbolic",GTK_ICON_SIZE_SMALL_TOOLBAR);
+				g_signal_connect(customheaderbar_data.menu_button,"clicked",G_CALLBACK(on_menubar_toggle),window);
+				gtk_widget_set_tooltip_text(customheaderbar_data.menu_button,"Toggle menu bar"); //TODO: action_toggle_menu? toggle_menu? See all actions in deadbeef/plugins/gtkui/gtkui.c and all the DB_plugin_action_t.
+				gtk_style_context_add_class(gtk_widget_get_style_context(customheaderbar_data.menu_button),"flat");
+				gtk_widget_show(customheaderbar_data.menu_button);
+			gtk_box_pack_start(GTK_BOX(button_box),customheaderbar_data.menu_button,false,false,0);
 
-			customheaderbar_data.volume_scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL,0.0,1.0,0.05);
-				volumebar_change(NULL);
-				g_signal_connect(customheaderbar_data.volume_scale,"value-changed",G_CALLBACK(on_volumebar_change),NULL);
-				gtk_scale_set_draw_value(GTK_SCALE(customheaderbar_data.volume_scale),false);
-				gtk_widget_set_size_request(customheaderbar_data.volume_scale,100,-1);
-				gtk_widget_show(customheaderbar_data.volume_scale);
-			gtk_header_bar_pack_end(customheaderbar_data.headerbar,customheaderbar_data.volume_scale);
+			gtk_button_box_set_layout(GTK_BUTTON_BOX(button_box),GTK_BUTTONBOX_EXPAND);
+			gtk_widget_show(button_box);
+		gtk_header_bar_pack_end(customheaderbar_data.headerbar,button_box);
+
+		customheaderbar_data.volume_scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL,0.0,1.0,0.05);
+			volumebar_change(NULL);
+			g_signal_connect(customheaderbar_data.volume_scale,"value-changed",G_CALLBACK(on_volumebar_change),NULL);
+			gtk_scale_set_draw_value(GTK_SCALE(customheaderbar_data.volume_scale),false);
+			gtk_widget_set_size_request(customheaderbar_data.volume_scale,100,-1);
+			gtk_widget_show(customheaderbar_data.volume_scale);
+		gtk_header_bar_pack_end(customheaderbar_data.headerbar,customheaderbar_data.volume_scale);
 
 		gtk_widget_show(GTK_WIDGET(customheaderbar_data.headerbar));
 	gtk_window_set_titlebar(GTK_WINDOW(window),GTK_WIDGET(customheaderbar_data.headerbar));
@@ -226,21 +273,21 @@ static gboolean ui_on_play(__attribute__((unused)) gpointer user_data){
 	gtk_widget_set_sensitive(customheaderbar_data.buttons[BUTTON_JUMP_TO_CURRENT],true);
 	gtk_widget_set_sensitive(customheaderbar_data.buttons[BUTTON_STOP],true);
 	gtk_button_set_image(GTK_BUTTON(customheaderbar_data.buttons[BUTTON_PLAYPAUSE]),PAUSE_IMAGE_NEW);
-	return false;
+	return G_SOURCE_REMOVE;
 }
 static gboolean ui_on_stop(__attribute__((unused)) gpointer user_data){
 	gtk_widget_set_sensitive(customheaderbar_data.buttons[BUTTON_JUMP_TO_CURRENT],false);
 	gtk_widget_set_sensitive(customheaderbar_data.buttons[BUTTON_STOP],false);
 	gtk_button_set_image(GTK_BUTTON(customheaderbar_data.buttons[BUTTON_PLAYPAUSE]),PLAY_IMAGE_NEW);
-	return false;
+	return G_SOURCE_REMOVE;
 }
 static gboolean ui_on_unpause(__attribute__((unused)) gpointer user_data){
 	gtk_button_set_image(GTK_BUTTON(customheaderbar_data.buttons[BUTTON_PLAYPAUSE]),PAUSE_IMAGE_NEW);
-	return false;
+	return G_SOURCE_REMOVE;
 }
 static gboolean ui_on_pause(__attribute__((unused)) gpointer user_data){
 	gtk_button_set_image(GTK_BUTTON(customheaderbar_data.buttons[BUTTON_PLAYPAUSE]),PLAY_IMAGE_NEW);
-	return false;
+	return G_SOURCE_REMOVE;
 }
 static void ui_on_callback_end(__attribute__((unused)) void *data){
 	customheaderbar_data.ui_callback_id = 0;
@@ -272,6 +319,11 @@ static int customheaderbar_message(uint32_t id,__attribute__((unused)) uintptr_t
 		//case DB_EV_DSPCHAINCHANGED:
 		//	g_idle_add(dspcombo_change,NULL);
 		//	break;
+		case DB_EV_CONFIGCHANGED:
+			if(customheaderbar_data.on_config_load_callback_id == 0){
+				customheaderbar_data.on_config_load_callback_id = g_idle_add_full(G_PRIORITY_LOW,on_config_load,NULL,on_config_load_callback_end);
+			}
+			break;
 	}
 	return 0;
 }
@@ -282,6 +334,14 @@ static int customheaderbar_connect(){
 	gtkui_plugin->add_window_init_hook(customheaderbar_window_init_hook,NULL);
 	return 0;
 }
+
+
+static const char settings_dlg[] =
+    "property \"Show menubar button\"             checkbox customheaderbar.menubar_button           1;\n"
+    "property \"Show window buttons\"             checkbox customheaderbar.window_buttons           1;\n"
+    "property \"Custom window decoration layout\" checkbox customheaderbar.decoration_layout_toggle 0;\n"
+    "property \"Window decoration layout\"        entry    customheaderbar.decoration_layout        \"menu:minimize,maximize,close\";\n"
+;
 
 static DB_misc_t plugin = {
 	.plugin.api_vmajor = DB_API_VERSION_MAJOR,
@@ -319,6 +379,7 @@ static DB_misc_t plugin = {
 		"SOFTWARE.\n"
 	,
 	.plugin.website = "https://example.org",
+    .plugin.configdialog = settings_dlg,
 	.plugin.connect = customheaderbar_connect,
 	.plugin.message = customheaderbar_message,
 };
