@@ -75,31 +75,51 @@ static gboolean dspcombo_init(__attribute__((unused)) gpointer user_data){
 	if(snprintf(path,sizeof(path),"%s/presets/dsp",deadbeef->get_system_dir(DDB_SYS_DIR_CONFIG)) >= 0){
 		struct dirent **namelist = NULL;
 		int n = scandir(path,&namelist,dsp_preset_scandir_filter,alphasort);
+
+		//Get active DSP preset name.
+		deadbeef->conf_lock();
+		const char *prev_dsp_name = deadbeef->conf_get_str_fast("gtkui.conf_dsp_preset","");
+		int selected = 0; //Default is 0, meaning the "unknown" DSP preset.
+
 		for(int i=0; i<n; i++){
-			{
+			{ //Modify the filename given by scandir by removing the file extension.
 				char *c;
 				for(c=namelist[i]->d_name; *c!='\0' && c<namelist[i]->d_name+PATH_MAX; c+=1);
 				if(namelist[i]->d_name+4 < c) *(c-4) = '\0';
 			}
 
+			//Find index of active DSP preset by name if not found yet.
+			if(selected == 0 && strcmp(prev_dsp_name,namelist[i]->d_name) == 0){selected = i+1;}
+
+			//Postpend name of DSP preset.
 			gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(customheaderbar_data.dsp_combo),namelist[i]->d_name);
+
 			free(namelist[i]);
 		}
+
+		deadbeef->conf_unlock();
+
 		free(namelist);
+
+		//Select the active DSP preset if it was found. Otherwise the "unknown" DSP preset.
+		gtk_combo_box_set_active(GTK_COMBO_BOX(customheaderbar_data.dsp_combo),selected);
 	}
 	return false;
 }
-//static gboolean dspcombo_change(__attribute__((unused)) gpointer user_data){
-//	gtk_combo_box_set_active(GTK_COMBO_BOX(customheaderbar_data.dsp_combo),0);
-//}
+
 static void on_dspcombo_change(GtkComboBox* self,__attribute__((unused)) gpointer user_data){
 	if(gtk_combo_box_get_active(self) == 0) return;
 
+	const char *name = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(self));
+
 	char path[PATH_MAX];
-	if(snprintf(path,sizeof(path),"%s/presets/dsp/%s.txt",deadbeef->get_system_dir(DDB_SYS_DIR_CONFIG),gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(self))) < 0) return;
+	if(snprintf(path,sizeof(path),"%s/presets/dsp/%s.txt",deadbeef->get_system_dir(DDB_SYS_DIR_CONFIG),name) < 0) return;
+
 	ddb_dsp_context_t *chain = NULL;
 	if(deadbeef->dsp_preset_load(path,&chain)) return;
+
 	deadbeef->streamer_set_dsp_chain(chain);
+    deadbeef->conf_set_str("gtkui.conf_dsp_preset",name);
 }
 
 #define PLAY_IMAGE_NEW  gtk_image_new_from_icon_name("media-playback-start-symbolic",GTK_ICON_SIZE_SMALL_TOOLBAR)
@@ -150,6 +170,34 @@ static gboolean on_config_load(__attribute__((unused)) gpointer user_data){
 }
 static void on_config_load_callback_end(__attribute__((unused)) void *data){
 	customheaderbar_data.on_config_load_callback_id = 0;
+}
+
+static gboolean ui_on_play(__attribute__((unused)) gpointer user_data){
+	gtk_widget_set_sensitive(customheaderbar_data.buttons[BUTTON_JUMP_TO_CURRENT],true);
+	gtk_widget_set_sensitive(customheaderbar_data.buttons[BUTTON_STOP],true);
+	gtk_widget_set_sensitive(customheaderbar_data.buttons[BUTTON_NEXT],true);
+	gtk_widget_set_sensitive(customheaderbar_data.buttons[BUTTON_PREV],true);
+	gtk_button_set_image(GTK_BUTTON(customheaderbar_data.buttons[BUTTON_PLAYPAUSE]),PAUSE_IMAGE_NEW);
+	return G_SOURCE_REMOVE;
+}
+static gboolean ui_on_stop(__attribute__((unused)) gpointer user_data){
+	gtk_widget_set_sensitive(customheaderbar_data.buttons[BUTTON_JUMP_TO_CURRENT],false);
+	gtk_widget_set_sensitive(customheaderbar_data.buttons[BUTTON_STOP],false);
+	gtk_widget_set_sensitive(customheaderbar_data.buttons[BUTTON_NEXT],false);
+	gtk_widget_set_sensitive(customheaderbar_data.buttons[BUTTON_PREV],false);
+	gtk_button_set_image(GTK_BUTTON(customheaderbar_data.buttons[BUTTON_PLAYPAUSE]),PLAY_IMAGE_NEW);
+	return G_SOURCE_REMOVE;
+}
+static gboolean ui_on_unpause(__attribute__((unused)) gpointer user_data){
+	gtk_button_set_image(GTK_BUTTON(customheaderbar_data.buttons[BUTTON_PLAYPAUSE]),PAUSE_IMAGE_NEW);
+	return G_SOURCE_REMOVE;
+}
+static gboolean ui_on_pause(__attribute__((unused)) gpointer user_data){
+	gtk_button_set_image(GTK_BUTTON(customheaderbar_data.buttons[BUTTON_PLAYPAUSE]),PLAY_IMAGE_NEW);
+	return G_SOURCE_REMOVE;
+}
+static void ui_on_callback_end(__attribute__((unused)) void *data){
+	customheaderbar_data.ui_callback_id = 0;
 }
 
 static void customheaderbar_window_init_hook(__attribute__((unused)) void *user_data){
@@ -220,11 +268,21 @@ static void customheaderbar_window_init_hook(__attribute__((unused)) void *user_
 
 		customheaderbar_data.dsp_combo = gtk_combo_box_text_new();
 			dspcombo_init(NULL);
-			{
+			gtk_widget_set_size_request(customheaderbar_data.dsp_combo,64,-1);
+			/*{ TODO: How?
 				GtkLabel *dsp_combo_label = GTK_LABEL(gtk_bin_get_child(GTK_BIN(customheaderbar_data.dsp_combo)));
 				gtk_label_set_max_width_chars(dsp_combo_label,16);
 				gtk_label_set_ellipsize(dsp_combo_label,PANGO_ELLIPSIZE_END);
-			}
+			}*/
+			/*{
+				GList *renderers = gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(customheaderbar_data.dsp_combo));
+				while(renderers != NULL){
+					GtkCellRenderer *renderer = GTK_CELL_RENDERER(renderers->data);
+					g_object_set(renderer,"ellipsize", PANGO_ELLIPSIZE_END,"width-chars", 10,NULL);
+					renderers = renderers->next;
+				}
+				g_list_free(renderers);
+			}*/
 			g_signal_connect(customheaderbar_data.dsp_combo,"changed",G_CALLBACK(on_dspcombo_change),NULL);
 			gtk_widget_show(customheaderbar_data.dsp_combo);
 		gtk_header_bar_pack_start(customheaderbar_data.headerbar,customheaderbar_data.dsp_combo);
@@ -267,31 +325,21 @@ static void customheaderbar_window_init_hook(__attribute__((unused)) void *user_
 		G_CALLBACK(on_notify_title),
 		NULL
 	);
+
+	//Initial state.
+	switch(deadbeef->get_output()->state()){
+		case DDB_PLAYBACK_STATE_STOPPED:
+			customheaderbar_data.ui_callback_id = g_idle_add_full(G_PRIORITY_LOW,ui_on_stop,NULL,ui_on_callback_end);
+			break;
+		case DDB_PLAYBACK_STATE_PLAYING:
+			customheaderbar_data.ui_callback_id = g_idle_add_full(G_PRIORITY_LOW,ui_on_play,NULL,ui_on_callback_end);
+			break;
+		case DDB_PLAYBACK_STATE_PAUSED:
+			customheaderbar_data.ui_callback_id = g_idle_add_full(G_PRIORITY_LOW,ui_on_pause,NULL,ui_on_callback_end);
+			break;
+	}
 }
 
-static gboolean ui_on_play(__attribute__((unused)) gpointer user_data){
-	gtk_widget_set_sensitive(customheaderbar_data.buttons[BUTTON_JUMP_TO_CURRENT],true);
-	gtk_widget_set_sensitive(customheaderbar_data.buttons[BUTTON_STOP],true);
-	gtk_button_set_image(GTK_BUTTON(customheaderbar_data.buttons[BUTTON_PLAYPAUSE]),PAUSE_IMAGE_NEW);
-	return G_SOURCE_REMOVE;
-}
-static gboolean ui_on_stop(__attribute__((unused)) gpointer user_data){
-	gtk_widget_set_sensitive(customheaderbar_data.buttons[BUTTON_JUMP_TO_CURRENT],false);
-	gtk_widget_set_sensitive(customheaderbar_data.buttons[BUTTON_STOP],false);
-	gtk_button_set_image(GTK_BUTTON(customheaderbar_data.buttons[BUTTON_PLAYPAUSE]),PLAY_IMAGE_NEW);
-	return G_SOURCE_REMOVE;
-}
-static gboolean ui_on_unpause(__attribute__((unused)) gpointer user_data){
-	gtk_button_set_image(GTK_BUTTON(customheaderbar_data.buttons[BUTTON_PLAYPAUSE]),PAUSE_IMAGE_NEW);
-	return G_SOURCE_REMOVE;
-}
-static gboolean ui_on_pause(__attribute__((unused)) gpointer user_data){
-	gtk_button_set_image(GTK_BUTTON(customheaderbar_data.buttons[BUTTON_PLAYPAUSE]),PLAY_IMAGE_NEW);
-	return G_SOURCE_REMOVE;
-}
-static void ui_on_callback_end(__attribute__((unused)) void *data){
-	customheaderbar_data.ui_callback_id = 0;
-}
 static int customheaderbar_message(uint32_t id,__attribute__((unused)) uintptr_t ctx,uint32_t p1,__attribute__((unused)) uint32_t p2){
 	//TODO: MAybe instead of sentivitiy, set enabled on actions.
 	switch(id){
