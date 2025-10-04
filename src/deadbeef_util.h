@@ -1,12 +1,10 @@
 #ifndef __DDB_CUSTOMHEADERBAR_DEADBEEF_UTIL_H
 #define __DDB_CUSTOMHEADERBAR_DEADBEEF_UTIL_H
 
-#include <gtk/gtk.h>
-#include <deadbeef/deadbeef.h>
-#include <deadbeef/gtkui_api.h>
+struct ddb_gtkui_widget_s;
+struct json_t;
 
-void gtkui_exec_action_14(DB_plugin_action_t *action,int cursor);
-GActionGroup *deadbeef_action_group(GHashTable *db_action_map);
-GtkWidget* gtkui_lookup_widget(GtkWidget *widget,const gchar *widget_name);
+int w_create_from_json(struct json_t *node,struct ddb_gtkui_widget_s **parent);
+struct json_t *w_save_widget_to_json(struct ddb_gtkui_widget_s *w);
 
 #endif
