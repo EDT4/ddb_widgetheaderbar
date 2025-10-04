@@ -12,16 +12,24 @@ ddb_gtkui_t *gtkui_plugin;
 #define CUSTOMHEADERBAR_CONFIG_START_WIDGET "customheaderbar.layout.start"
 #define CUSTOMHEADERBAR_CONFIG_END_WIDGET   "customheaderbar.layout.end"
 
+enum option_subtitle{
+	OPTION_SUBTITLE_NONE,
+	OPTION_SUBTITLE_STATIC,
+	OPTION_SUBTITLE_SWITCH_WHEN_PLAYING,
+};
+
 struct headerbar_t{
 	GtkHeaderBar *widget;
 	ddb_gtkui_widget_t *start_container;
 	ddb_gtkui_widget_t *end_container;
 	guint on_config_load_callback_id;
+	guint on_subtitle_callback_id;
 	struct{
-		bool menubar_button;
 		bool window_buttons;
 		bool decoration_layout_toggle;
-		const char *decoration_layout;
+		enum option_subtitle subtitle;
+		char subtitle_playing[200];
+		char subtitle_stopped[200];
 	} options;
 } headerbar;
 
@@ -63,9 +71,21 @@ static void customheaderbar_root_widget_save(ddb_gtkui_widget_t *container,const
 	}
 }
 
-static void on_notify_title(__attribute__((unused)) GtkWidget* widget,__attribute__((unused)) GParamSpec* property,__attribute__((unused)) gpointer data){
+/*static void on_notify_title(__attribute__((unused)) GtkWidget* widget,__attribute__((unused)) GParamSpec* property,__attribute__((unused)) gpointer data){
 	GtkWidget *title_label = gtk_header_bar_get_custom_title(GTK_HEADER_BAR(headerbar.widget));
 	if(title_label) gtk_label_set_text(GTK_LABEL(title_label),gtk_window_get_title(GTK_WINDOW(gtkui_plugin->get_mainwin())));
+}*/
+
+static gboolean on_subtitle_playing(__attribute__((unused)) gpointer user_data){
+	gtk_header_bar_set_subtitle(headerbar.widget,headerbar.options.subtitle_playing);
+	return G_SOURCE_REMOVE;
+}
+static gboolean on_subtitle_stopped(__attribute__((unused)) gpointer user_data){
+	gtk_header_bar_set_subtitle(headerbar.widget,headerbar.options.subtitle_stopped);
+	return G_SOURCE_REMOVE;
+}
+static void on_subtitle_callback_end(__attribute__((unused)) void *data){
+	headerbar.on_subtitle_callback_id = 0;
 }
 
 static gboolean on_config_load(__attribute__((unused)) gpointer user_data){
@@ -89,6 +109,42 @@ static gboolean on_config_load(__attribute__((unused)) gpointer user_data){
 		CONFIG_IF_BEGIN(bool,deadbeef->conf_get_int("customheaderbar.window_buttons",1),headerbar.options.window_buttons)
 			gtk_header_bar_set_show_close_button(headerbar.widget,headerbar.options.window_buttons);
 		CONFIG_IF_END()
+	}{
+		enum option_subtitle old_subtitle = headerbar.options.subtitle;
+		headerbar.options.subtitle = deadbeef->conf_get_int("customheaderbar.subtitlebar_mode",0);
+
+		switch(headerbar.options.subtitle){
+			case OPTION_SUBTITLE_STATIC:{
+				deadbeef->conf_lock();
+					const char *s = deadbeef->conf_get_str_fast("customheaderbar.subtitlebar_stopped",NULL);
+					int changed = s && strcmp(s,headerbar.options.subtitle_stopped) != 0;
+					if(changed){strncpy(headerbar.options.subtitle_stopped,s,sizeof(headerbar.options.subtitle_stopped));}
+				deadbeef->conf_unlock();
+				if(changed || old_subtitle != OPTION_SUBTITLE_STATIC) on_subtitle_stopped(NULL);
+			}	break;
+
+			case OPTION_SUBTITLE_SWITCH_WHEN_PLAYING:{
+				//TODO: This does not change the subtitle, though it will be changed later on anyway on a state change.
+				const char *s;
+				deadbeef->conf_lock();
+					s = deadbeef->conf_get_str_fast("customheaderbar.subtitlebar_stopped",NULL);
+					if(s && strcmp(s,headerbar.options.subtitle_stopped) != 0){
+						strncpy(headerbar.options.subtitle_stopped,s,sizeof(headerbar.options.subtitle_stopped));
+					}
+
+					s = deadbeef->conf_get_str_fast("customheaderbar.subtitlebar_playing",NULL);
+					if(s && strcmp(s,headerbar.options.subtitle_playing) != 0){
+						strncpy(headerbar.options.subtitle_playing,s,sizeof(headerbar.options.subtitle_playing));
+					}
+				deadbeef->conf_unlock();
+			}	break;
+
+			case OPTION_SUBTITLE_NONE:
+				if(old_subtitle){ //If turned off.
+					gtk_header_bar_set_subtitle(headerbar.widget,NULL);
+				}
+				break;
+		}
 	}
 	return G_SOURCE_REMOVE;
 }
@@ -96,12 +152,21 @@ static void on_config_load_callback_end(__attribute__((unused)) void *data){
 	headerbar.on_config_load_callback_id = 0;
 }
 
+static void config_init(){
+	headerbar.options.subtitle_stopped[0] = '\0';
+	headerbar.options.subtitle_playing[0] = '\0';
+	headerbar.options.window_buttons           = 0;
+	headerbar.options.decoration_layout_toggle = 0;
+	headerbar.options.subtitle = OPTION_SUBTITLE_NONE;
+	on_config_load(NULL);
+}
+
 static void customheaderbar_window_init_hook(__attribute__((unused)) void *user_data){
 	GtkWidget *window = gtkui_plugin->get_mainwin();
 	g_assert_nonnull(window);
 
 	headerbar.widget = GTK_HEADER_BAR(gtk_header_bar_new());
-		on_config_load(NULL);
+		config_init();
 
 		//Widget at start.
 		customheaderbar_root_widget_init(&headerbar.start_container,CUSTOMHEADERBAR_CONFIG_START_WIDGET);
@@ -114,12 +179,12 @@ static void customheaderbar_window_init_hook(__attribute__((unused)) void *user_
 		gtk_widget_show(GTK_WIDGET(headerbar.widget));
 	gtk_window_set_titlebar(GTK_WINDOW(window),GTK_WIDGET(headerbar.widget));
 
-	g_signal_connect(
+	/*g_signal_connect(
 		G_OBJECT(window),
 		"notify::title",
 		G_CALLBACK(on_notify_title),
 		NULL
-	);
+	);*/
 }
 
 static int customheaderbar_connect(void){
@@ -127,6 +192,10 @@ static int customheaderbar_connect(void){
 		return -1;
 	}
 	gtkui_plugin->add_window_init_hook(customheaderbar_window_init_hook,NULL);
+
+	headerbar.on_config_load_callback_id = 0;
+	headerbar.on_subtitle_callback_id    = 0;
+
 	return 0;
 }
 
@@ -143,6 +212,18 @@ static int customheaderbar_message(uint32_t id,__attribute__((unused)) uintptr_t
 				headerbar.on_config_load_callback_id = g_idle_add_full(G_PRIORITY_LOW,on_config_load,NULL,on_config_load_callback_end);
 			}
 			break;
+		case DB_EV_SONGSTARTED:
+			if(headerbar.options.subtitle == OPTION_SUBTITLE_SWITCH_WHEN_PLAYING){
+				if(headerbar.on_subtitle_callback_id != 0) g_source_remove(headerbar.on_subtitle_callback_id);
+				headerbar.on_subtitle_callback_id = g_idle_add_full(G_PRIORITY_LOW,on_subtitle_playing,NULL,on_subtitle_callback_end);
+			}
+			break;
+		case DB_EV_SONGFINISHED:
+			if(headerbar.options.subtitle == OPTION_SUBTITLE_SWITCH_WHEN_PLAYING){
+				if(headerbar.on_subtitle_callback_id != 0) g_source_remove(headerbar.on_subtitle_callback_id);
+				headerbar.on_subtitle_callback_id = g_idle_add_full(G_PRIORITY_LOW,on_subtitle_stopped,NULL,on_subtitle_callback_end);
+			}
+			break;
 	}
 	if(headerbar.start_container) send_messages_to_widgets(headerbar.start_container,id,ctx,p1,p2);
 	if(headerbar.end_container)   send_messages_to_widgets(headerbar.end_container,id,ctx,p1,p2);
@@ -150,9 +231,18 @@ static int customheaderbar_message(uint32_t id,__attribute__((unused)) uintptr_t
 }
 
 static const char settings_dlg[] =
-    "property \"Show window buttons\"             checkbox customheaderbar.window_buttons           1;\n"
-    "property \"Custom window decoration layout\" checkbox customheaderbar.decoration_layout_toggle 0;\n"
-    "property \"Window decoration layout\"        entry    customheaderbar.decoration_layout        \"menu:minimize,maximize,close\";\n"
+	"property \"Show window buttons\"             checkbox  customheaderbar.window_buttons           1;\n"
+	"property \"Custom window decoration layout\" checkbox  customheaderbar.decoration_layout_toggle 0;\n"
+	"property box hbox[2] height=-1;\n"
+	"property box hbox[0] border=5 height=-1;\n"
+	"property box vbox[1] expand fill height=-1;\n"
+	"property \"Window decoration layout\"        entry     customheaderbar.decoration_layout        \"menu:minimize,maximize,close\";\n"
+	"property \"Use subtitle text\"               select[3] customheaderbar.subtitlebar_mode         0 Disabled Static \"Switch when playing\";\n"
+	"property box hbox[2] height=-1;\n"
+	"property box hbox[0] border=5 height=-1;\n"
+	"property box vbox[2] expand fill height=-1;\n"
+	"property \"Subtitle text\"                     entry    customheaderbar.subtitlebar_stopped \"\";\n"
+	"property \"Subtitle text while playing\"       entry    customheaderbar.subtitlebar_playing \"\";\n"
 ;
 
 static DB_misc_t plugin ={
@@ -190,7 +280,7 @@ static DB_misc_t plugin ={
 	.plugin.website = "https://github.org/EDT4/ddb_customheaderbar",
 	.plugin.connect = customheaderbar_connect,
 	.plugin.disconnect = customheaderbar_disconnect,
-    .plugin.configdialog = settings_dlg,
+	.plugin.configdialog = settings_dlg,
 	.plugin.message = customheaderbar_message,
 };
 
