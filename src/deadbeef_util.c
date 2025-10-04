@@ -108,42 +108,52 @@ error:
 
 //Copied (with modifications) from deadbeef/plugins/gtkui/plugins.c due to it not being exported.
 json_t *w_save_widget_to_json(ddb_gtkui_widget_t *w){
-    json_t *node = json_object();
+	json_t *node = json_object();
 
-    json_object_set(node,"type",json_string(w->type));
+	json_object_set(node,"type",json_string(w->type));
 
-    uint32_t flags = gtkui_plugin->w_get_type_flags(w->type);
+	uint32_t flags = gtkui_plugin->w_get_type_flags(w->type);
 
-    if(flags & DDB_WF_SUPPORTS_EXTENDED_API){
-        ddb_gtkui_widget_extended_api_t *api = (ddb_gtkui_widget_extended_api_t *)(w + 1);
-        if(api->_size >= sizeof(ddb_gtkui_widget_extended_api_t)){
-            char const **keyvalues = api->serialize_to_keyvalues(w);
+	if(flags & DDB_WF_SUPPORTS_EXTENDED_API){
+		ddb_gtkui_widget_extended_api_t *api = (ddb_gtkui_widget_extended_api_t *)(w + 1);
+		if(api->_size >= sizeof(ddb_gtkui_widget_extended_api_t)){
+			char const **keyvalues = api->serialize_to_keyvalues(w);
 
-            if(keyvalues != NULL){
-                json_t *settings = json_object();
-                for(int i = 0; keyvalues[i]; i += 2){
-                    json_t *value = json_string(keyvalues[i + 1]);
-                    json_object_set(settings,keyvalues[i],value);
-                    json_decref(value);
-                }
-                json_object_set(node,"settings",settings);
-                json_decref(settings);
-            }
-        }
-    }else if(w->save){
-        char params[1000] = "";
-        w->save(w,params,sizeof(params));
-        json_object_set(node,"legacy_params",json_string(params));
-    }
+			if(keyvalues != NULL){
+				json_t *settings = json_object();
+				for(int i = 0; keyvalues[i]; i += 2){
+					json_t *value = json_string(keyvalues[i + 1]);
+					json_object_set(settings,keyvalues[i],value);
+					json_decref(value);
+				}
+				json_object_set(node,"settings",settings);
+				json_decref(settings);
+			}
+		}
+	}else if(w->save){
+		char params[1000] = "";
+		w->save(w,params,sizeof(params));
+		json_object_set(node,"legacy_params",json_string(params));
+	}
 
-    if(w->children != NULL){
-        json_t *children = json_array();
-        for(ddb_gtkui_widget_t *c = w->children; c; c = c->next){
-            json_t *child = w_save_widget_to_json(c);
-            json_array_append(children,child);
-        }
-        json_object_set(node,"children",children);
-    }
+	if(w->children != NULL){
+		json_t *children = json_array();
+		for(ddb_gtkui_widget_t *c = w->children; c; c = c->next){
+			json_t *child = w_save_widget_to_json(c);
+			json_array_append(children,child);
+		}
+		json_object_set(node,"children",children);
+	}
 
-    return node;
+	return node;
+}
+
+//Copied (with modifications) from deadbeef/plugins/gtkui/gtkui.c due to it not being exported.
+void send_messages_to_widgets(ddb_gtkui_widget_t *w,uint32_t id,uintptr_t ctx,uint32_t p1,uint32_t p2){
+	for(ddb_gtkui_widget_t *c = w->children; c; c = c->next){
+		send_messages_to_widgets(c,id,ctx,p1,p2);
+	}
+	if(w->message){
+		w->message(w,id,ctx,p1,p2);
+	}
 }

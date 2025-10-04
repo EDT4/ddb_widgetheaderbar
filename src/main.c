@@ -144,6 +144,8 @@ static int customheaderbar_message(uint32_t id,__attribute__((unused)) uintptr_t
 			}
 			break;
 	}
+	if(headerbar.start_container) send_messages_to_widgets(headerbar.start_container,id,ctx,p1,p2);
+	if(headerbar.end_container)   send_messages_to_widgets(headerbar.end_container,id,ctx,p1,p2);
 	return 0;
 }
 
