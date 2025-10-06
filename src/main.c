@@ -4,7 +4,7 @@
 #include <deadbeef/gtkui_api.h>
 #include <stdbool.h>
 #include "deadbeef_util.h"
-#include "gtk_util.h"
+#include "subtitle.h"
 
 DB_functions_t *deadbeef;
 ddb_gtkui_t *gtkui_plugin;
@@ -12,24 +12,14 @@ ddb_gtkui_t *gtkui_plugin;
 #define CUSTOMHEADERBAR_CONFIG_START_WIDGET "customheaderbar.layout.start"
 #define CUSTOMHEADERBAR_CONFIG_END_WIDGET   "customheaderbar.layout.end"
 
-enum option_subtitle{
-	OPTION_SUBTITLE_NONE,
-	OPTION_SUBTITLE_STATIC,
-	OPTION_SUBTITLE_SWITCH_WHEN_PLAYING,
-};
-
 struct headerbar_t{
 	GtkHeaderBar *widget;
 	ddb_gtkui_widget_t *start_container;
 	ddb_gtkui_widget_t *end_container;
 	guint on_config_load_callback_id;
-	guint on_subtitle_callback_id;
 	struct{
 		bool window_buttons;
 		bool decoration_layout_toggle;
-		enum option_subtitle subtitle;
-		char subtitle_playing[200];
-		char subtitle_stopped[200];
 	} options;
 } headerbar;
 
@@ -71,24 +61,11 @@ static void customheaderbar_root_widget_save(ddb_gtkui_widget_t *container,const
 	}
 }
 
-/*static void on_notify_title(__attribute__((unused)) GtkWidget* widget,__attribute__((unused)) GParamSpec* property,__attribute__((unused)) gpointer data){
-	GtkWidget *title_label = gtk_header_bar_get_custom_title(GTK_HEADER_BAR(headerbar.widget));
-	if(title_label) gtk_label_set_text(GTK_LABEL(title_label),gtk_window_get_title(GTK_WINDOW(gtkui_plugin->get_mainwin())));
-}*/
-
-static gboolean on_subtitle_playing(__attribute__((unused)) gpointer user_data){
-	gtk_header_bar_set_subtitle(headerbar.widget,headerbar.options.subtitle_playing);
-	return G_SOURCE_REMOVE;
-}
-static gboolean on_subtitle_stopped(__attribute__((unused)) gpointer user_data){
-	gtk_header_bar_set_subtitle(headerbar.widget,headerbar.options.subtitle_stopped);
-	return G_SOURCE_REMOVE;
-}
-static void on_subtitle_callback_end(__attribute__((unused)) void *data){
-	headerbar.on_subtitle_callback_id = 0;
-}
-
 static gboolean on_config_load(__attribute__((unused)) gpointer user_data){
+	//Here is a tedious process of determining which options that were changed.
+	//It would be better if there was some kind of listenable event for each of the options.
+	//If this is not done, then every small option change in the global config will trigger a lot of computations.
+
 	#define CONFIG_IF_BEGIN(ty,conf_get,opt_var) \
 		ty opt = conf_get;\
 		if(opt_var != opt){\
@@ -109,56 +86,12 @@ static gboolean on_config_load(__attribute__((unused)) gpointer user_data){
 		CONFIG_IF_BEGIN(bool,deadbeef->conf_get_int("customheaderbar.window_buttons",1),headerbar.options.window_buttons)
 			gtk_header_bar_set_show_close_button(headerbar.widget,headerbar.options.window_buttons);
 		CONFIG_IF_END()
-	}{
-		enum option_subtitle old_subtitle = headerbar.options.subtitle;
-		headerbar.options.subtitle = deadbeef->conf_get_int("customheaderbar.subtitlebar_mode",0);
-
-		switch(headerbar.options.subtitle){
-			case OPTION_SUBTITLE_STATIC:{
-				deadbeef->conf_lock();
-					const char *s = deadbeef->conf_get_str_fast("customheaderbar.subtitlebar_stopped",NULL);
-					int changed = s && strcmp(s,headerbar.options.subtitle_stopped) != 0;
-					if(changed){strncpy(headerbar.options.subtitle_stopped,s,sizeof(headerbar.options.subtitle_stopped));}
-				deadbeef->conf_unlock();
-				if(changed || old_subtitle != OPTION_SUBTITLE_STATIC) on_subtitle_stopped(NULL);
-			}	break;
-
-			case OPTION_SUBTITLE_SWITCH_WHEN_PLAYING:{
-				//TODO: This does not change the subtitle, though it will be changed later on anyway on a state change.
-				const char *s;
-				deadbeef->conf_lock();
-					s = deadbeef->conf_get_str_fast("customheaderbar.subtitlebar_stopped",NULL);
-					if(s && strcmp(s,headerbar.options.subtitle_stopped) != 0){
-						strncpy(headerbar.options.subtitle_stopped,s,sizeof(headerbar.options.subtitle_stopped));
-					}
-
-					s = deadbeef->conf_get_str_fast("customheaderbar.subtitlebar_playing",NULL);
-					if(s && strcmp(s,headerbar.options.subtitle_playing) != 0){
-						strncpy(headerbar.options.subtitle_playing,s,sizeof(headerbar.options.subtitle_playing));
-					}
-				deadbeef->conf_unlock();
-			}	break;
-
-			case OPTION_SUBTITLE_NONE:
-				if(old_subtitle){ //If turned off.
-					gtk_header_bar_set_subtitle(headerbar.widget,NULL);
-				}
-				break;
-		}
 	}
+	subtitle_on_config_load(headerbar.widget);
 	return G_SOURCE_REMOVE;
 }
 static void on_config_load_callback_end(__attribute__((unused)) void *data){
 	headerbar.on_config_load_callback_id = 0;
-}
-
-static void config_init(){
-	headerbar.options.subtitle_stopped[0] = '\0';
-	headerbar.options.subtitle_playing[0] = '\0';
-	headerbar.options.window_buttons           = 0;
-	headerbar.options.decoration_layout_toggle = 0;
-	headerbar.options.subtitle = OPTION_SUBTITLE_NONE;
-	on_config_load(NULL);
 }
 
 static void customheaderbar_window_init_hook(__attribute__((unused)) void *user_data){
@@ -166,7 +99,7 @@ static void customheaderbar_window_init_hook(__attribute__((unused)) void *user_
 	g_assert_nonnull(window);
 
 	headerbar.widget = GTK_HEADER_BAR(gtk_header_bar_new());
-		config_init();
+		on_config_load(NULL);
 
 		//Widget at start.
 		customheaderbar_root_widget_init(&headerbar.start_container,CUSTOMHEADERBAR_CONFIG_START_WIDGET);
@@ -178,13 +111,13 @@ static void customheaderbar_window_init_hook(__attribute__((unused)) void *user_
 
 		gtk_widget_show(GTK_WIDGET(headerbar.widget));
 	gtk_window_set_titlebar(GTK_WINDOW(window),GTK_WIDGET(headerbar.widget));
+}
 
-	/*g_signal_connect(
-		G_OBJECT(window),
-		"notify::title",
-		G_CALLBACK(on_notify_title),
-		NULL
-	);*/
+static int customheaderbar_start(){
+	headerbar.on_config_load_callback_id = 0;
+	headerbar.options.window_buttons           = 0;
+	headerbar.options.decoration_layout_toggle = 0;
+	return subtitle_start();
 }
 
 static int customheaderbar_connect(void){
@@ -193,16 +126,11 @@ static int customheaderbar_connect(void){
 	}
 	gtkui_plugin->add_window_init_hook(customheaderbar_window_init_hook,NULL);
 
-	headerbar.on_config_load_callback_id = 0;
-	headerbar.on_subtitle_callback_id    = 0;
-
 	return 0;
 }
 
-static int customheaderbar_disconnect(void){
-	customheaderbar_root_widget_save(headerbar.start_container,CUSTOMHEADERBAR_CONFIG_START_WIDGET);
-	customheaderbar_root_widget_save(headerbar.end_container  ,CUSTOMHEADERBAR_CONFIG_END_WIDGET);
-	return 0;
+static int customheaderbar_stop(void){
+	return subtitle_stop();
 }
 
 static int customheaderbar_message(uint32_t id,__attribute__((unused)) uintptr_t ctx,__attribute__((unused)) uint32_t p1,__attribute__((unused)) uint32_t p2){
@@ -212,19 +140,18 @@ static int customheaderbar_message(uint32_t id,__attribute__((unused)) uintptr_t
 				headerbar.on_config_load_callback_id = g_idle_add_full(G_PRIORITY_LOW,on_config_load,NULL,on_config_load_callback_end);
 			}
 			break;
-		case DB_EV_SONGSTARTED:
-			if(headerbar.options.subtitle == OPTION_SUBTITLE_SWITCH_WHEN_PLAYING){
-				if(headerbar.on_subtitle_callback_id != 0) g_source_remove(headerbar.on_subtitle_callback_id);
-				headerbar.on_subtitle_callback_id = g_idle_add_full(G_PRIORITY_LOW,on_subtitle_playing,NULL,on_subtitle_callback_end);
-			}
-			break;
-		case DB_EV_SONGFINISHED:
-			if(headerbar.options.subtitle == OPTION_SUBTITLE_SWITCH_WHEN_PLAYING){
-				if(headerbar.on_subtitle_callback_id != 0) g_source_remove(headerbar.on_subtitle_callback_id);
-				headerbar.on_subtitle_callback_id = g_idle_add_full(G_PRIORITY_LOW,on_subtitle_stopped,NULL,on_subtitle_callback_end);
-			}
+		case DB_EV_TERMINATE:
+			//These are here and not in `disconnect` because disconnect happens too late (after all the widgets have been removed).
+			//This is a little later than `w_save`, which is the timing target.
+			//See `deadbeef/plugins/gtkui/gtukui.c:gtkui_quit_cb`.
+			//`gtkui_quit_cb` calls `w_save`, which calls the original `_save_widget_to_json` on the main root widget.
+			//customheaderbar attempts to do the same, but for its two root widgets.
+			//The only problem is that sometimes, `DB_EV_TERMINATE` is not triggered (depending on the shutdown type. See `deadbeef/plugins/gtkui/gtukui.c:_should_allow_shutdown`).
+			customheaderbar_root_widget_save(headerbar.start_container,CUSTOMHEADERBAR_CONFIG_START_WIDGET);
+			customheaderbar_root_widget_save(headerbar.end_container  ,CUSTOMHEADERBAR_CONFIG_END_WIDGET);
 			break;
 	}
+	subtitle_message(headerbar.widget,id,ctx,p1,p2);
 	if(headerbar.start_container) send_messages_to_widgets(headerbar.start_container,id,ctx,p1,p2);
 	if(headerbar.end_container)   send_messages_to_widgets(headerbar.end_container,id,ctx,p1,p2);
 	return 0;
@@ -253,7 +180,9 @@ static DB_misc_t plugin ={
 	.plugin.type = DB_PLUGIN_MISC,
 	.plugin.id = "customheaderbar-gtk3",
 	.plugin.name = "Customisable Header Bar for GTK3",
-	.plugin.descr = "A customisable GTK3 header bar. Widgets can be added and modified in Design Mode.",
+	.plugin.descr =
+		"A customisable GTK3 header bar.\n"
+		"Widgets can be added and modified in Design Mode.",
 	.plugin.copyright =
 		"MIT License\n"
 		"\n"
@@ -279,7 +208,8 @@ static DB_misc_t plugin ={
 	,
 	.plugin.website = "https://github.org/EDT4/ddb_customheaderbar",
 	.plugin.connect = customheaderbar_connect,
-	.plugin.disconnect = customheaderbar_disconnect,
+	.plugin.start = customheaderbar_start,
+	.plugin.stop = customheaderbar_stop,
 	.plugin.configdialog = settings_dlg,
 	.plugin.message = customheaderbar_message,
 };
