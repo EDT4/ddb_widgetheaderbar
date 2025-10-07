@@ -3,6 +3,7 @@
 #include <deadbeef/deadbeef.h>
 #include <deadbeef/gtkui_api.h>
 #include <stdbool.h>
+#include "api.h"
 #include "deadbeef_util.h"
 #include "subtitle.h"
 
@@ -172,18 +173,21 @@ static const char settings_dlg[] =
 	"property \"Subtitle text while playing\"       entry    customheaderbar.subtitlebar_playing \"\";\n"
 ;
 
-static DB_misc_t plugin ={
-	.plugin.api_vmajor = DB_API_VERSION_MAJOR,
-	.plugin.api_vminor = DB_API_VERSION_MINOR,
-	.plugin.version_major = 1,
-	.plugin.version_minor = 0,
-	.plugin.type = DB_PLUGIN_MISC,
-	.plugin.id = "customheaderbar-gtk3",
-	.plugin.name = "Customisable Header Bar for GTK3",
-	.plugin.descr =
+static GtkHeaderBar       *api_get_headerbar       (){return headerbar.widget;}
+static ddb_gtkui_widget_t *api_get_rootwidget_start(){return headerbar.start_container;}
+static ddb_gtkui_widget_t *api_get_rootwidget_end  (){return headerbar.end_container;}
+static ddb_customheaderbar_t plugin ={
+	.misc.plugin.api_vmajor = DB_API_VERSION_MAJOR,
+	.misc.plugin.api_vminor = DB_API_VERSION_MINOR,
+	.misc.plugin.version_major = 1,
+	.misc.plugin.version_minor = 0,
+	.misc.plugin.type = DB_PLUGIN_MISC,
+	.misc.plugin.id = "customheaderbar-gtk3",
+	.misc.plugin.name = "Customisable Header Bar for GTK3",
+	.misc.plugin.descr =
 		"A customisable GTK3 header bar.\n"
 		"Widgets can be added and modified in Design Mode.",
-	.plugin.copyright =
+	.misc.plugin.copyright =
 		"MIT License\n"
 		"\n"
 		"Copyright 2025 EDT4\n"
@@ -206,12 +210,15 @@ static DB_misc_t plugin ={
 		"OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\n"
 		"SOFTWARE.\n"
 	,
-	.plugin.website = "https://github.org/EDT4/ddb_customheaderbar",
-	.plugin.connect = customheaderbar_connect,
-	.plugin.start = customheaderbar_start,
-	.plugin.stop = customheaderbar_stop,
-	.plugin.configdialog = settings_dlg,
-	.plugin.message = customheaderbar_message,
+	.misc.plugin.website = "https://github.org/EDT4/ddb_customheaderbar",
+	.misc.plugin.connect = customheaderbar_connect,
+	.misc.plugin.start   = customheaderbar_start,
+	.misc.plugin.stop    = customheaderbar_stop,
+	.misc.plugin.message = customheaderbar_message,
+	.misc.plugin.configdialog = settings_dlg,
+	.get_headerbar        = api_get_headerbar,
+	.get_rootwidget_start = api_get_rootwidget_start,
+	.get_rootwidget_end   = api_get_rootwidget_end,
 };
 
 __attribute__((visibility("default")))
