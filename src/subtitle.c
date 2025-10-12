@@ -45,7 +45,7 @@ static gboolean subtitle_on_playing(gpointer user_data){
 	gtk_header_bar_set_subtitle(widget,subtitle.options.playing);
 	return G_SOURCE_REMOVE;
 }
-static gboolean subtitle_on_stopped(__attribute__((unused)) gpointer user_data){
+static gboolean subtitle_on_stopped(gpointer user_data){
 	GtkHeaderBar *widget = (GtkHeaderBar*)user_data;
 	if(subtitle.stopped_tf_bytecode){
 		ddb_tf_context_t ctx = {
@@ -85,7 +85,7 @@ void subtitle_on_config_load(GtkHeaderBar *widget){
 			deadbeef->conf_unlock();
 
 			//Update current subtitle.
-			if(changed || old_subtitle != OPTION_SUBTITLE_STATIC) subtitle_on_stopped(NULL);
+			if(changed || old_subtitle != OPTION_SUBTITLE_STATIC) subtitle_on_stopped(widget);
 		}	break;
 
 		case OPTION_SUBTITLE_SWITCH_WHEN_PLAYING:{
@@ -121,11 +121,11 @@ void subtitle_on_config_load(GtkHeaderBar *widget){
 				if(output){
 					switch(output->state()){
 						case DDB_PLAYBACK_STATE_STOPPED:
-							subtitle_on_stopped(NULL);
+							subtitle_on_stopped(widget);
 							break;
 						case DDB_PLAYBACK_STATE_PLAYING:
 						case DDB_PLAYBACK_STATE_PAUSED:
-							subtitle_on_playing(NULL);
+							subtitle_on_playing(widget);
 							break;
 					}
 				}
