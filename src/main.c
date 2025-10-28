@@ -186,7 +186,18 @@ static ddb_customheaderbar_t plugin ={
 	.misc.plugin.name = "Customisable Header Bar for GTK3",
 	.misc.plugin.descr =
 		"A customisable GTK3 header bar.\n"
-		"Widgets can be added and modified in Design Mode.",
+		"\n"
+		"Allows widgets to be placed on the two sides of a GTK3 header bar.\n"
+		"Widgets can be added and modified in Design Mode.\n"
+		"\n"
+		"This is implemented by placing two new root widgets on each side of the header bar.\n"
+		"The widgets are stored in the config in the same way as the GTKUI root widget is.\n"
+		"\n"
+		"The subtitle text feature allows for setting a text below the title.\n"
+		"It it configured in a similar way as to the title text in the settings,\n"
+		"allowing the display of title formatted strings.\n"
+		"One difference though is that it is not updated at regular intervals unlike other UI elements.\n"
+	,
 	.misc.plugin.copyright =
 		"MIT License\n"
 		"\n"
