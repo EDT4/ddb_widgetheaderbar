@@ -8,8 +8,8 @@
 DB_functions_t *deadbeef;
 ddb_gtkui_t *gtkui_plugin;
 
-#define CUSTOMHEADERBAR_CONFIG_START_WIDGET "customheaderbar.layout.start"
-#define CUSTOMHEADERBAR_CONFIG_END_WIDGET   "customheaderbar.layout.end"
+#define WIDGETHEADERBAR_CONFIG_START_WIDGET "widgetheaderbar.layout.start"
+#define WIDGETHEADERBAR_CONFIG_END_WIDGET   "widgetheaderbar.layout.end"
 
 struct headerbar_t{
 	GtkHeaderBar *widget;
@@ -22,7 +22,7 @@ struct headerbar_t{
 	} options;
 } headerbar;
 
-static void customheaderbar_root_widget_init(ddb_gtkui_widget_t **container,const char *conf_field){
+static void widgetheaderbar_root_widget_init(ddb_gtkui_widget_t **container,const char *conf_field){
 	*container = gtkui_plugin->w_create("box");
 	gtk_widget_show((*container)->widget);
 
@@ -31,7 +31,7 @@ static void customheaderbar_root_widget_init(ddb_gtkui_widget_t **container,cons
 	gtkui_plugin->w_append(*container,w);
 }
 
-static void customheaderbar_root_widget_save(ddb_gtkui_widget_t *container,const char *conf_field){
+static void widgetheaderbar_root_widget_save(ddb_gtkui_widget_t *container,const char *conf_field){
 	if(!container || !container->children) return;
 	gtkui_plugin->w_save_layout_to_conf_key(conf_field,container->children);
 }
@@ -48,17 +48,17 @@ static gboolean on_config_load(__attribute__((unused)) gpointer user_data){
 	#define CONFIG_IF_END() }
 
 	{
-		CONFIG_IF_BEGIN(bool,deadbeef->conf_get_int("customheaderbar.decoration_layout_toggle",0),headerbar.options.decoration_layout_toggle)
+		CONFIG_IF_BEGIN(bool,deadbeef->conf_get_int("widgetheaderbar.decoration_layout_toggle",0),headerbar.options.decoration_layout_toggle)
 			if(headerbar.options.decoration_layout_toggle){
 				deadbeef->conf_lock();
-				gtk_header_bar_set_decoration_layout(headerbar.widget,deadbeef->conf_get_str_fast("customheaderbar.decoration_layout",""));
+				gtk_header_bar_set_decoration_layout(headerbar.widget,deadbeef->conf_get_str_fast("widgetheaderbar.decoration_layout",""));
 				deadbeef->conf_unlock();
 			}else{
 				gtk_header_bar_set_decoration_layout(headerbar.widget,NULL);
 			}
 		CONFIG_IF_END()
 	}{
-		CONFIG_IF_BEGIN(bool,deadbeef->conf_get_int("customheaderbar.window_buttons",1),headerbar.options.window_buttons)
+		CONFIG_IF_BEGIN(bool,deadbeef->conf_get_int("widgetheaderbar.window_buttons",1),headerbar.options.window_buttons)
 			gtk_header_bar_set_show_close_button(headerbar.widget,headerbar.options.window_buttons);
 		CONFIG_IF_END()
 	}
@@ -69,7 +69,7 @@ static void on_config_load_callback_end(__attribute__((unused)) void *data){
 	headerbar.on_config_load_callback_id = 0;
 }
 
-static void customheaderbar_window_init_hook(__attribute__((unused)) void *user_data){
+static void widgetheaderbar_window_init_hook(__attribute__((unused)) void *user_data){
 	GtkWidget *window = gtkui_plugin->get_mainwin();
 	g_assert_nonnull(window);
 
@@ -77,38 +77,38 @@ static void customheaderbar_window_init_hook(__attribute__((unused)) void *user_
 		on_config_load(NULL);
 
 		//Widget at start.
-		customheaderbar_root_widget_init(&headerbar.start_container,CUSTOMHEADERBAR_CONFIG_START_WIDGET);
+		widgetheaderbar_root_widget_init(&headerbar.start_container,WIDGETHEADERBAR_CONFIG_START_WIDGET);
 		gtk_header_bar_pack_start(headerbar.widget,headerbar.start_container->widget);
 
 		//Widget at end.
-		customheaderbar_root_widget_init(&headerbar.end_container,CUSTOMHEADERBAR_CONFIG_END_WIDGET);
+		widgetheaderbar_root_widget_init(&headerbar.end_container,WIDGETHEADERBAR_CONFIG_END_WIDGET);
 		gtk_header_bar_pack_end(headerbar.widget,headerbar.end_container->widget);
 
 		gtk_widget_show(GTK_WIDGET(headerbar.widget));
 	gtk_window_set_titlebar(GTK_WINDOW(window),GTK_WIDGET(headerbar.widget));
 }
 
-static int customheaderbar_start(){
+static int widgetheaderbar_start(){
 	headerbar.on_config_load_callback_id       = 0;
 	headerbar.options.window_buttons           = 0;
 	headerbar.options.decoration_layout_toggle = 0;
 	return subtitle_start();
 }
 
-static int customheaderbar_connect(void){
+static int widgetheaderbar_connect(void){
 	if(!(gtkui_plugin = (ddb_gtkui_t*) deadbeef->plug_get_for_id(DDB_GTKUI_PLUGIN_ID))){
 		return -1;
 	}
-	gtkui_plugin->add_window_init_hook(customheaderbar_window_init_hook,NULL);
+	gtkui_plugin->add_window_init_hook(widgetheaderbar_window_init_hook,NULL);
 
 	return 0;
 }
 
-static int customheaderbar_stop(void){
+static int widgetheaderbar_stop(void){
 	return subtitle_stop();
 }
 
-static int customheaderbar_message(uint32_t id,__attribute__((unused)) uintptr_t ctx,__attribute__((unused)) uint32_t p1,__attribute__((unused)) uint32_t p2){
+static int widgetheaderbar_message(uint32_t id,__attribute__((unused)) uintptr_t ctx,__attribute__((unused)) uint32_t p1,__attribute__((unused)) uint32_t p2){
 	switch(id){
 		case DB_EV_CONFIGCHANGED:
 			if(headerbar.on_config_load_callback_id == 0){
@@ -120,10 +120,10 @@ static int customheaderbar_message(uint32_t id,__attribute__((unused)) uintptr_t
 			//This is a little later than `w_save`, which is the timing target.
 			//See `deadbeef/plugins/gtkui/gtukui.c:gtkui_quit_cb`.
 			//`gtkui_quit_cb` calls `w_save`, which calls the original `_save_widget_to_json` on the main root widget.
-			//customheaderbar attempts to do the same, but for its two root widgets.
+			//widgetheaderbar attempts to do the same, but for its two root widgets.
 			//The only problem is that sometimes, `DB_EV_TERMINATE` is not triggered (depending on the shutdown type. See `deadbeef/plugins/gtkui/gtukui.c:_should_allow_shutdown`).
-			customheaderbar_root_widget_save(headerbar.start_container,CUSTOMHEADERBAR_CONFIG_START_WIDGET);
-			customheaderbar_root_widget_save(headerbar.end_container  ,CUSTOMHEADERBAR_CONFIG_END_WIDGET);
+			widgetheaderbar_root_widget_save(headerbar.start_container,WIDGETHEADERBAR_CONFIG_START_WIDGET);
+			widgetheaderbar_root_widget_save(headerbar.end_container  ,WIDGETHEADERBAR_CONFIG_END_WIDGET);
 			break;
 	}
 	subtitle_message(headerbar.widget,id,ctx,p1,p2);
@@ -133,31 +133,31 @@ static int customheaderbar_message(uint32_t id,__attribute__((unused)) uintptr_t
 }
 
 static const char settings_dlg[] =
-	"property \"Show window buttons\"             checkbox  customheaderbar.window_buttons           1;\n"
-	"property \"Custom window decoration layout\" checkbox  customheaderbar.decoration_layout_toggle 0;\n"
+	"property \"Show window buttons\"             checkbox  widgetheaderbar.window_buttons           1;\n"
+	"property \"Custom window decoration layout\" checkbox  widgetheaderbar.decoration_layout_toggle 0;\n"
 	"property box hbox[2] height=-1;\n"
 	"property box hbox[0] border=5 height=-1;\n"
 	"property box vbox[1] expand fill height=-1;\n"
-	"property \"Window decoration layout\"        entry     customheaderbar.decoration_layout        \"menu:minimize,maximize,close\";\n"
-	"property \"Use subtitle text\"               select[3] customheaderbar.subtitlebar_mode         0 Disabled Static \"Switch when playing\";\n"
+	"property \"Window decoration layout\"        entry     widgetheaderbar.decoration_layout        \"menu:minimize,maximize,close\";\n"
+	"property \"Use subtitle text\"               select[3] widgetheaderbar.subtitlebar_mode         0 Disabled Static \"Switch when playing\";\n"
 	"property box hbox[2] height=-1;\n"
 	"property box hbox[0] border=5 height=-1;\n"
 	"property box vbox[2] expand fill height=-1;\n"
-	"property \"Subtitle text\"                     entry    customheaderbar.subtitlebar_stopped \"\";\n"
-	"property \"Subtitle text while playing\"       entry    customheaderbar.subtitlebar_playing \"\";\n"
+	"property \"Subtitle text\"                     entry    widgetheaderbar.subtitlebar_stopped \"\";\n"
+	"property \"Subtitle text while playing\"       entry    widgetheaderbar.subtitlebar_playing \"\";\n"
 ;
 
 static GtkHeaderBar       *api_get_headerbar       (){return headerbar.widget;}
 static ddb_gtkui_widget_t *api_get_rootwidget_start(){return headerbar.start_container;}
 static ddb_gtkui_widget_t *api_get_rootwidget_end  (){return headerbar.end_container;}
-static ddb_customheaderbar_t plugin ={
+static ddb_widgetheaderbar_t plugin ={
 	.misc.plugin.api_vmajor = DB_API_VERSION_MAJOR,
 	.misc.plugin.api_vminor = DB_API_VERSION_MINOR,
 	.misc.plugin.version_major = 1,
 	.misc.plugin.version_minor = 0,
 	.misc.plugin.type = DB_PLUGIN_MISC,
-	.misc.plugin.id = "customheaderbar-gtk3",
-	.misc.plugin.name = "Customisable Header Bar for GTK3",
+	.misc.plugin.id = "widgetheaderbar-gtk3",
+	.misc.plugin.name = "Widget Header Bar for GTK3",
 	.misc.plugin.descr =
 		"A customisable GTK3 header bar.\n"
 		"\n"
@@ -195,11 +195,11 @@ static ddb_customheaderbar_t plugin ={
 		"OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\n"
 		"SOFTWARE.\n"
 	,
-	.misc.plugin.website = "https://github.org/EDT4/ddb_customheaderbar",
-	.misc.plugin.connect = customheaderbar_connect,
-	.misc.plugin.start   = customheaderbar_start,
-	.misc.plugin.stop    = customheaderbar_stop,
-	.misc.plugin.message = customheaderbar_message,
+	.misc.plugin.website = "https://github.org/EDT4/ddb_widgetheaderbar",
+	.misc.plugin.connect = widgetheaderbar_connect,
+	.misc.plugin.start   = widgetheaderbar_start,
+	.misc.plugin.stop    = widgetheaderbar_stop,
+	.misc.plugin.message = widgetheaderbar_message,
 	.misc.plugin.configdialog = settings_dlg,
 	.get_headerbar        = api_get_headerbar,
 	.get_rootwidget_start = api_get_rootwidget_start,
@@ -207,7 +207,7 @@ static ddb_customheaderbar_t plugin ={
 };
 
 __attribute__((visibility("default")))
-DB_plugin_t * customheaderbar_gtk3_load(DB_functions_t *api){
+DB_plugin_t * widgetheaderbar_gtk3_load(DB_functions_t *api){
 	deadbeef = api;
 	return DB_PLUGIN(&plugin);
 }

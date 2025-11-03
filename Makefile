@@ -24,12 +24,12 @@ endef
 debug: GTKMM=gtkmm-3.0
 debug: GTK=gtk+-3.0
 debug: CFLAGS+= -g
-debug: $(OUT_DIR) $(SOURCES) $(OUT_DIR)/customheaderbar_gtk3_debug.so
+debug: $(OUT_DIR) $(SOURCES) $(OUT_DIR)/widgetheaderbar_gtk3_debug.so
 
 gtk3: GTKMM=gtkmm-3.0
 gtk3: GTK=gtk+-3.0
 gtk3: CFLAGS+= -DNDEBUG
-gtk3: $(OUT_DIR) $(SOURCES) $(OUT_DIR)/customheaderbar_gtk3.so
+gtk3: $(OUT_DIR) $(SOURCES) $(OUT_DIR)/widgetheaderbar_gtk3.so
 
 $(OUT_DIR):
 	@echo "Creating build directories"

@@ -1,11 +1,11 @@
-#ifndef __DDB_CUSTOMHEADERBAR_API_H
-#define __DDB_CUSTOMHEADERBAR_API_H
+#ifndef __DDB_WIDGETHEADERBAR_API_H
+#define __DDB_WIDGETHEADERBAR_API_H
 
-typedef struct ddb_customheaderbar_s{
+typedef struct ddb_widgetheaderbar_s{
 	DB_misc_t misc;
     GtkHeaderBar       *(*get_headerbar)();
     ddb_gtkui_widget_t *(*get_rootwidget_start)();
     ddb_gtkui_widget_t *(*get_rootwidget_end)();
-} ddb_customheaderbar_t;
+} ddb_widgetheaderbar_t;
 
 #endif

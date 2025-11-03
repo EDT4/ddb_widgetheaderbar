@@ -69,12 +69,12 @@ static void subtitle_on_callback_end(__attribute__((unused)) void *data){
 
 void subtitle_on_config_load(GtkHeaderBar *widget){
 	enum option_subtitle old_subtitle = subtitle.options.mode;
-	subtitle.options.mode = deadbeef->conf_get_int("customheaderbar.subtitlebar_mode",0);
+	subtitle.options.mode = deadbeef->conf_get_int("widgetheaderbar.subtitlebar_mode",0);
 
 	switch(subtitle.options.mode){
 		case OPTION_SUBTITLE_STATIC:{
 			deadbeef->conf_lock();
-				const char *s = deadbeef->conf_get_str_fast("customheaderbar.subtitlebar_stopped",NULL);
+				const char *s = deadbeef->conf_get_str_fast("widgetheaderbar.subtitlebar_stopped",NULL);
 				int changed = s && strcmp(s,subtitle.options.stopped) != 0;
 				if(changed){
 					strncpy(subtitle.options.stopped,s,sizeof(subtitle.options.stopped));
@@ -92,13 +92,13 @@ void subtitle_on_config_load(GtkHeaderBar *widget){
 			//TODO: This does not change the subtitle, though it will be changed later on anyway on a state change.
 			const char *s;
 			deadbeef->conf_lock();
-				s = deadbeef->conf_get_str_fast("customheaderbar.subtitlebar_stopped",NULL);
+				s = deadbeef->conf_get_str_fast("widgetheaderbar.subtitlebar_stopped",NULL);
 				bool changed_stopped;
 				if((changed_stopped = s && strcmp(s,subtitle.options.stopped) != 0)){
 					strncpy(subtitle.options.stopped,s,sizeof(subtitle.options.stopped));
 				}
 
-				s = deadbeef->conf_get_str_fast("customheaderbar.subtitlebar_playing",NULL);
+				s = deadbeef->conf_get_str_fast("widgetheaderbar.subtitlebar_playing",NULL);
 				bool changed_playing;
 				if((changed_playing = s && strcmp(s,subtitle.options.playing) != 0)){
 					strncpy(subtitle.options.playing,s,sizeof(subtitle.options.playing));
