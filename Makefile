@@ -1,8 +1,8 @@
 CC?=gcc
 CFLAGS+=-O3 -Wall -Wextra -Wpedantic -Wno-deprecated-declarations -fPIC -fvisibility=hidden -ffunction-sections -fdata-sections -flto=auto -std=c99 -D_GNU_SOURCE
 LDFLAGS+=-shared -flto
-LIBFLAGS=`pkg-config --cflags $(GTK) jansson`
-LIBS=`pkg-config --libs $(GTK) jansson`
+LIBFLAGS=`pkg-config --cflags $(GTK)`
+LIBS=`pkg-config --libs $(GTK)`
 
 SRC_DIR?=src
 OUT_DIR?=out

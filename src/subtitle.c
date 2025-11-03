@@ -141,18 +141,15 @@ void subtitle_on_config_load(GtkHeaderBar *widget){
 }
 
 void subtitle_message(GtkHeaderBar *widget,uint32_t id,__attribute__((unused)) uintptr_t ctx,__attribute__((unused)) uint32_t p1,__attribute__((unused)) uint32_t p2){
+	if(subtitle.options.mode != OPTION_SUBTITLE_SWITCH_WHEN_PLAYING) return;
 	switch(id){
 		case DB_EV_SONGSTARTED:
-			if(subtitle.options.mode == OPTION_SUBTITLE_SWITCH_WHEN_PLAYING){
-				if(subtitle.callback_id != 0) g_source_remove(subtitle.callback_id);
-				subtitle.callback_id = g_idle_add_full(G_PRIORITY_LOW,subtitle_on_playing,widget,subtitle_on_callback_end);
-			}
+			if(subtitle.callback_id != 0) g_source_remove(subtitle.callback_id);
+			subtitle.callback_id = g_idle_add_full(G_PRIORITY_LOW,subtitle_on_playing,widget,subtitle_on_callback_end);
 			break;
 		case DB_EV_SONGFINISHED:
-			if(subtitle.options.mode == OPTION_SUBTITLE_SWITCH_WHEN_PLAYING){
-				if(subtitle.callback_id != 0) g_source_remove(subtitle.callback_id);
-				subtitle.callback_id = g_idle_add_full(G_PRIORITY_LOW,subtitle_on_stopped,widget,subtitle_on_callback_end);
-			}
+			if(subtitle.callback_id != 0) g_source_remove(subtitle.callback_id);
+			subtitle.callback_id = g_idle_add_full(G_PRIORITY_LOW,subtitle_on_stopped,widget,subtitle_on_callback_end);
 			break;
 	}
 }

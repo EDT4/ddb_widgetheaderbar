@@ -1,10 +1,8 @@
 #include <gtk/gtk.h>
-#include <jansson.h>
 #include <deadbeef/deadbeef.h>
 #include <deadbeef/gtkui_api.h>
 #include <stdbool.h>
 #include "api.h"
-#include "deadbeef_util.h"
 #include "subtitle.h"
 
 DB_functions_t *deadbeef;
@@ -28,38 +26,14 @@ static void customheaderbar_root_widget_init(ddb_gtkui_widget_t **container,cons
 	*container = gtkui_plugin->w_create("box");
 	gtk_widget_show((*container)->widget);
 
-	ddb_gtkui_widget_t *w = NULL;
-	deadbeef->conf_lock();
-	const char *json = deadbeef->conf_get_str_fast(conf_field,NULL);
-	if(json){
-		json_t *layout = json_loads(json,0,NULL);
-		if(layout != NULL){
-			if(w_create_from_json(layout,&w) >= 0){
-				gtkui_plugin->w_append(*container,w);
-			}
-			json_delete(layout);
-		}
-	}
-	deadbeef->conf_unlock();
-
-	if(!w){
-		w = gtkui_plugin->w_create("placeholder");
-		gtkui_plugin->w_append(*container,w);
-	}
+	ddb_gtkui_widget_t *w = gtkui_plugin->w_load_layout_from_conf_key(conf_field);
+	if(!w){w = gtkui_plugin->w_create("placeholder");}
+	gtkui_plugin->w_append(*container,w);
 }
 
 static void customheaderbar_root_widget_save(ddb_gtkui_widget_t *container,const char *conf_field){
 	if(!container || !container->children) return;
-
-	json_t *layout = w_save_widget_to_json(container->children);
-	if(layout){
-		char *layout_str = json_dumps(layout,JSON_COMPACT);
-		if(layout_str){
-			deadbeef->conf_set_str(conf_field,layout_str);
-			free(layout_str);
-		}
-		json_delete(layout);
-	}
+	gtkui_plugin->w_save_layout_to_conf_key(conf_field,container->children);
 }
 
 static gboolean on_config_load(__attribute__((unused)) gpointer user_data){
@@ -115,7 +89,7 @@ static void customheaderbar_window_init_hook(__attribute__((unused)) void *user_
 }
 
 static int customheaderbar_start(){
-	headerbar.on_config_load_callback_id = 0;
+	headerbar.on_config_load_callback_id       = 0;
 	headerbar.options.window_buttons           = 0;
 	headerbar.options.decoration_layout_toggle = 0;
 	return subtitle_start();
@@ -153,8 +127,8 @@ static int customheaderbar_message(uint32_t id,__attribute__((unused)) uintptr_t
 			break;
 	}
 	subtitle_message(headerbar.widget,id,ctx,p1,p2);
-	if(headerbar.start_container) send_messages_to_widgets(headerbar.start_container,id,ctx,p1,p2);
-	if(headerbar.end_container)   send_messages_to_widgets(headerbar.end_container,id,ctx,p1,p2);
+	if(headerbar.start_container) gtkui_plugin->w_send_message(headerbar.start_container,id,ctx,p1,p2);
+	if(headerbar.end_container)   gtkui_plugin->w_send_message(headerbar.end_container,id,ctx,p1,p2);
 	return 0;
 }
 
