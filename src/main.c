@@ -150,6 +150,9 @@ static const char settings_dlg[] =
 static GtkHeaderBar       *api_get_headerbar       (){return headerbar.widget;}
 static ddb_gtkui_widget_t *api_get_rootwidget_start(){return headerbar.start_container;}
 static ddb_gtkui_widget_t *api_get_rootwidget_end  (){return headerbar.end_container;}
+static const char widgetheaderbar_license[] = {
+#embed "../LICENSE"
+,'\0'};
 static ddb_widgetheaderbar_t plugin ={
 	.misc.plugin.api_vmajor = DB_API_VERSION_MAJOR,
 	.misc.plugin.api_vminor = DB_API_VERSION_MINOR,
@@ -172,29 +175,7 @@ static ddb_widgetheaderbar_t plugin ={
 		"allowing the display of title formatted strings.\n"
 		"One difference though is that it is not updated at regular intervals unlike other UI elements.\n"
 	,
-	.misc.plugin.copyright =
-		"MIT License\n"
-		"\n"
-		"Copyright 2025 EDT4\n"
-		"\n"
-		"Permission is hereby granted,free of charge,to any person obtaining a copy\n"
-		"of this software and associated documentation files(the \"Software\"),to deal\n"
-		"in the Software without restriction,including without limitation the rights\n"
-		"to use,copy,modify,merge,publish,distribute,sublicense,and/or sell\n"
-		"copies of the Software,and to permit persons to whom the Software is\n"
-		"furnished to do so,subject to the following conditions:\n"
-		"\n"
-		"The above copyright notice and this permission notice shall be included in all\n"
-		"copies or substantial portions of the Software.\n"
-		"\n"
-		"THE SOFTWARE IS PROVIDED \"AS IS\",WITHOUT WARRANTY OF ANY KIND,EXPRESS OR\n"
-		"IMPLIED,INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"
-		"FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"
-		"AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,DAMAGES OR OTHER\n"
-		"LIABILITY,WHETHER IN AN ACTION OF CONTRACT,TORT OR OTHERWISE,ARISING FROM,\n"
-		"OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\n"
-		"SOFTWARE.\n"
-	,
+	.misc.plugin.copyright = widgetheaderbar_license,
 	.misc.plugin.website = "https://github.org/EDT4/ddb_widgetheaderbar",
 	.misc.plugin.connect = widgetheaderbar_connect,
 	.misc.plugin.start   = widgetheaderbar_start,
