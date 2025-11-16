@@ -11,7 +11,7 @@ ddb_gtkui_t *gtkui_plugin;
 #define WIDGETHEADERBAR_CONFIG_START_WIDGET "widgetheaderbar.layout.start"
 #define WIDGETHEADERBAR_CONFIG_END_WIDGET   "widgetheaderbar.layout.end"
 
-struct headerbar_t{
+struct headerbar_s{
 	GtkHeaderBar *widget;
 	ddb_gtkui_widget_t *start_container;
 	ddb_gtkui_widget_t *end_container;
@@ -37,6 +37,8 @@ static void widgetheaderbar_root_widget_save(ddb_gtkui_widget_t *container,const
 }
 
 static gboolean on_config_load(__attribute__((unused)) gpointer user_data){
+	if(!headerbar.widget) return G_SOURCE_REMOVE;
+
 	//Here is a tedious process of determining which options that were changed.
 	//It would be better if there was some kind of listenable event for each of the options.
 	//If this is not done, then every small option change in the global config will trigger a lot of computations.
@@ -71,7 +73,7 @@ static void on_config_load_callback_end(__attribute__((unused)) void *data){
 
 static void widgetheaderbar_window_init_hook(__attribute__((unused)) void *user_data){
 	GtkWidget *window = gtkui_plugin->get_mainwin();
-	g_assert_nonnull(window);
+	if(!window) return;
 
 	headerbar.widget = GTK_HEADER_BAR(gtk_header_bar_new());
 		on_config_load(NULL);
@@ -89,9 +91,7 @@ static void widgetheaderbar_window_init_hook(__attribute__((unused)) void *user_
 }
 
 static int widgetheaderbar_start(){
-	headerbar.on_config_load_callback_id       = 0;
-	headerbar.options.window_buttons           = 0;
-	headerbar.options.decoration_layout_toggle = 0;
+	memset(&headerbar,0,sizeof(struct headerbar_s));
 	return subtitle_start();
 }
 

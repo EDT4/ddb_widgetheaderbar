@@ -8,9 +8,15 @@ Widgets can be added to the two sides of the header bar.
 - Customisable/optional subtitle using title formatting.
 - API.
 
-![Demo](demo/mainwin.webp)
+## Demo
+
+The plugin in the default GTK3 theme:
+
+![Overall Demo](demo/mainwin.webp)
+Shows the header bar, with its title and subtitle, proceeding with a look in Design Mode, pasting widgets and then stopping playbback to showcase the dynamic subtitle.
 
 ![Preferences](demo/preferences.png)
+The plugin preferences pane.
 
 ## Build
 
